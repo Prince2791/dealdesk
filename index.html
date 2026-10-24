@@ -150,6 +150,10 @@ const EV={
 };
 const EVK=["rate","bank","volt","port","resin"];
 const PIN="FSA2026", SALT="iimv-fsa-deal-desk";
+/* Google Sheet recording: paste your Apps Script web-app URL (ends in /exec) between the quotes. Leave empty to switch recording off. */
+const SHEET_URL="https://script.google.com/macros/s/AKfycbwExDMq7NSHRdviiXTUZ_PRpFG8tPu_YCU1PkJto8mfqMxQwgMEFCE7qNIVZbFdh6WL/exec";
+function report(stage,data){if(!SHEET_URL)return;try{const body=JSON.stringify(Object.assign({session:S.session,team:S.team,stage,clientTime:new Date().toISOString()},data));fetch(SHEET_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body}).catch(()=>{});}catch(e){}}
+const portTxt=port=>Object.entries(port).map(([id,b])=>id+":"+b).join(", ");
 
 /* ============ utils ============ */
 function h53(str,seed){let h1=0xdeadbeef^(seed||0),h2=0x41c6ce57^(seed||0);for(let i=0;i<str.length;i++){const ch=str.charCodeAt(i);h1=Math.imul(h1^ch,2654435761);h2=Math.imul(h2^ch,1597334677);}h1=Math.imul(h1^(h1>>>16),2246822507)^Math.imul(h2^(h2>>>13),3266489909);h2=Math.imul(h2^(h2>>>16),2246822507)^Math.imul(h1^(h1>>>13),3266489909);return 4294967296*(2097151&h2)+(h1>>>0);}
@@ -274,7 +278,7 @@ function y2plan(){
    <div class="panel tw"><table class="st">${held.map(d=>{const box=useBox(d,pp.port[d.id]);const can=SELLABLE.includes(d.id);return `<tr><td><b>${esc(d.name)}</b><br><span class="small muted">${esc(BOX[box])}</span></td><td class="n">₹${f(y1Value(d,ev1))} cr</td><td>${can?`<label class="toggle"><input type="checkbox" data-sell="${d.id}"${pp.sell[d.id]?" checked":""}> Sell now</label>`:`<span class="small muted">Held this year</span>`}</td></tr>`;}).join("")}</table></div>
    <div class="row"><button type="button" class="primary" id="l2">Lock Year-2 decisions</button></div></div>`;
   app.querySelectorAll("[data-sell]").forEach(c=>c.onchange=()=>{pp.sell[c.dataset.sell]=c.checked;saveP();});
-  l2.onclick=()=>{l2.outerHTML=`<span class="row"><span class="small">Lock it? You can't change it after the Year-2 market moves.</span><button type="button" class="primary" id="yes2">Yes, lock</button><button type="button" id="no2">Keep editing</button></span>`;yes2.onclick=()=>{pp.y2locked=true;saveP();setView("y2wait");};no2.onclick=()=>render();};
+  l2.onclick=()=>{l2.outerHTML=`<span class="row"><span class="small">Lock it? You can't change it after the Year-2 market moves.</span><button type="button" class="primary" id="yes2">Yes, lock</button><button type="button" id="no2">Keep editing</button></span>`;yes2.onclick=()=>{pp.y2locked=true;saveP();report("Y2 sales locked",{portfolio:portTxt(pp.port),sales:Object.keys(pp.sell||{}).filter(k=>pp.sell[k]&&k in pp.port).join(", ")||"none"});setView("y2wait");};no2.onclick=()=>render();};
 }
 function y2wait(){
   const pp=P();
@@ -302,7 +306,7 @@ function y2analyst(){
     <div><label for="zq3">3. Total impairment losses in Year 2 (₹ cr, as a positive number; 0 if none)</label><input id="zq3" inputmode="decimal" autocomplete="off"></div>
     <div><label for="zq4">4. Which Year-2 line surprised you most, and why? (not scored)</label><input id="zq4" autocomplete="off" maxlength="240"></div></div>
     <div class="row"><button class="primary" type="submit">Submit Year-2 analysis</button></div><p class="err" id="a2e" hidden></p></form></div>`;
-  a2f.onsubmit=e=>{e.preventDefault();const g=[zq1,zq2,zq3].map(x=>parseNum(x.value));if(g.some(v=>!isFinite(v))){a2e.hidden=false;a2e.textContent="Enter a number for questions 1 to 3.";return;}pp.ans2={g,note:zq4.value.trim()};saveP();setView("y2result");};
+  a2f.onsubmit=e=>{e.preventDefault();const g=[zq1,zq2,zq3].map(x=>parseNum(x.value));if(g.some(v=>!isFinite(v))){a2e.hidden=false;a2e.textContent="Enter a number for questions 1 to 3.";return;}pp.ans2={g,note:zq4.value.trim()};saveP();{const Y=y1(pp),R2=compute2(pp.port,evVals(pp.ev),evVals2(pp.ev2),pp.sell||{});const ok=R2.an.map((v,i)=>Math.abs(g[i]-v)<=Math.max(1,Math.abs(v)*.01));const an2=ok.filter(Boolean).length;report("Y2 analysis",{portfolio:portTxt(pp.port),sales:Object.keys(pp.sell||{}).filter(k=>pp.sell[k]&&k in pp.port).join(", ")||"none",answers:g.join(" | "),correct:ok.map(x=>x?1:0).join(" | "),econ:r1(R2.econ),pat:r1(R2.pat),oci:r1(R2.oci),score:Y.score+Math.round(R2.econ)+30*an2,note:pp.ans2.note});}setView("y2result");};
 }
 function y2result(){
   const pp=P(),Y=y1(pp),ev1=Y.ev,e2=evVals2(pp.ev2),R=compute2(pp.port,ev1,e2,pp.sell||{});
@@ -321,8 +325,9 @@ function y2result(){
    <div class="panel stack"><h3>Your analysis</h3>${["Year-2 PAT","Realised or recycled on sale","Impairment losses"].map((l,i)=>`<div class="${ok[i]?"okbox":"nobox"}"><b>${l}:</b> you said ${f(pp.ans2.g[i])}, the answer is <b>${f(R.an[i])}</b>.</div>`).join("")}</div>
    ${story.length?`<div class="panel stack"><h3>What Year 2 revealed</h3><ul style="margin:0;padding-left:20px" class="stack">${story.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>`:""}
    <div class="panel stack"><p class="eyebrow">Final result token (both years)</p><p class="small muted">Paste this one: it replaces your Year-1 token.</p><div class="token">${tk}</div><div class="row"><button type="button" class="primary" id="cp2">Copy token</button></div></div>
+   <div class="row"><button type="button" id="hm2">Back to home</button><button type="button" class="ghost" id="nw2">Start a new game</button></div>
    <p class="small muted">Year-2 score = economic return in Year 2 + 30 per correct analyst answer.</p></div>`;
-  cp2.onclick=()=>copyText(tk,cp2);
+  cp2.onclick=()=>copyText(tk,cp2);hm2.onclick=()=>setView("home");nw2.onclick=()=>confirmNew(nw2);
 }
 function iRun2(p){
   if(!S.ev2Idx)S.ev2Idx=Object.fromEntries(EVK2.map(k=>[k,EV2[k].def]));
@@ -341,7 +346,9 @@ function iRun2(p){
 let S={view:"home"};let tick=null;
 const app=document.getElementById("app"),chips=document.getElementById("chips");
 const keep=()=>({view:S.view,role:S.role,session:S.session,team:S.team,itab:S.itab,evIdx:S.evIdx,ev2Idx:S.ev2Idx,lbText:S.lbText});
-function save(){store.set("dd-state",keep());}
+function roleKey(r){return r==="instructor"?"dd-host":r==="student"?"dd-team":null;}
+function save(){const k=roleKey(S.role);if(k)store.set(k,keep());const h=S.role==="instructor"?"#host":S.role==="student"?"#team":"";try{if(location.hash!==h)history.replaceState(null,"",location.pathname+location.search+h);}catch(e){}}
+function studentRoute(){const pp=P();return pp.ans2?"y2result":pp.ev2?"y2analyst":pp.y2locked?"y2wait":pp.ans?"result":pp.ev?"analyst":pp.locked?"wait":"desk";}
 function setView(v,x){Object.assign(S,{view:v},x||{});save();render();}
 function pk(){return "dd:"+S.session+":"+(S.team||"").toLowerCase();}
 function P(){if(!S._p||S._pk!==pk()){S._pk=pk();S._p=store.get(pk())||{port:{},locked:false,ev:null,ans:null};}return S._p;}
@@ -362,9 +369,11 @@ function render(){
   clearInterval(tick);tick=null;chips.innerHTML="";
   if(S.session)chips.innerHTML+=`<span class="chip">Session ${esc(S.session)}</span>`;
   if(S.role==="student"&&S.team)chips.innerHTML+=`<span class="chip">${esc(S.team)}</span>`;
+  if(S.role&&S.view!=="home"){chips.innerHTML+=`<button type="button" class="chip" id="swr" style="cursor:pointer;border:1px solid var(--line)">Home</button>`;}
   const p=S.role==="student"&&S.team&&S.session?P():null;
   setWire(p&&p.ev2&&S.view.startsWith("y2")?null:p&&p.ev?evVals(p.ev):(S.view==="instr"&&S.evIdx&&S.evShown?evVals(S.evIdx):null));
   ({home,pin,instr,join,desk,wait,analyst,result,y2plan,y2wait,y2analyst,y2result}[S.view]||home)();
+  {const sw=document.getElementById("swr");if(sw)sw.onclick=()=>setView("home");}
   window.scrollTo(0,0);
 }
 function home(){
@@ -378,11 +387,13 @@ function home(){
     <div style="background:var(--c-jv);color:var(--c-jv-ink)">Joint ventures<small>Ind AS 111</small></div>
     <div style="background:var(--c-sub);color:var(--c-sub-ink)">Business combinations<small>Ind AS 103 / 110</small></div>
     <div style="background:var(--c-se);color:var(--c-se-ink)">Structured entities<small>Ind AS 110</small></div></div>
+   ${(()=>{const t=store.get("dd-team"),h=store.get("dd-host");if(!(t&&t.team&&t.session)&&!(h&&h.session))return "";return `<div class="panel stack" style="border-color:var(--teal)"><h3>Pick up where you left off</h3><div class="row">${t&&t.team&&t.session?`<button type="button" class="primary" id="resT">Continue as ${esc(t.team)} (session ${esc(t.session)})</button>`:""}${t&&t.team&&t.session?`<button type="button" class="ghost" id="newT">Start a new game as a team</button>`:""}${h&&h.session?`<button type="button" id="resH">Continue the instructor console (session ${esc(h.session)})</button>`:""}</div></div>`;})()}
    <div class="role">
     <button type="button" id="goS"><b>Join as a team</b><span>Enter a team name and the session code on the screen.</span></button>
     <button type="button" id="goI"><b>Run the class</b><span>Instructor console: session code, market events, leaderboard.</span></button></div>
   </div>`;
-  goS.onclick=()=>setView("join");goI.onclick=()=>setView(S.role==="instructor"&&S.session?"instr":"pin");
+  goS.onclick=()=>setView("join");goI.onclick=()=>{const h=store.get("dd-host");if(h&&h.session){resumeHost();}else setView("pin");};
+  const rt=document.getElementById("resT"),rh=document.getElementById("resH");if(rt)rt.onclick=resumeTeam;{const nt=document.getElementById("newT");if(nt)nt.onclick=()=>confirmNew(nt);}if(rh)rh.onclick=resumeHost;
 }
 function pin(){
   app.innerHTML=`<div class="stack" style="max-width:520px"><h2>Instructor console</h2>
@@ -488,7 +499,7 @@ function desk(){
     if(missing){lerr.hidden=false;lerr.textContent="Choose how to account for every deal you invest in ("+missing+" missing).";return;}
     if(!Object.keys(pp.port).length){lerr.hidden=false;lerr.textContent="Pick at least one deal.";return;}
     lerr.hidden=true;lock.outerHTML=`<span class="row"><span class="small">Lock it? You can't change it after the market moves.</span><button type="button" class="primary" id="yes">Yes, lock</button><button type="button" id="no">Keep editing</button></span>`;
-    yes.onclick=()=>{pp.locked=true;saveP();setView("wait");};no.onclick=()=>render();};
+    yes.onclick=()=>{pp.locked=true;saveP();report("Y1 portfolio locked",{portfolio:portTxt(pp.port),invested:Object.keys(pp.port).reduce((a,id)=>a+DEALS.find(d=>d.id===id).t,0),briefing:pp.br?"yes":"no"});setView("wait");};no.onclick=()=>render();};
 }
 function wait(){
   const pp=P();
@@ -528,7 +539,7 @@ function analyst(){
     <p class="small muted">Numbers only, one decimal at most. Use a minus sign for negatives.</p>
     <div class="row"><button class="primary" type="submit">Submit analysis</button></div></form>
   </div>`;
-  af.onsubmit=e=>{e.preventDefault();const g=[q1,q2,q3,q4].map(x=>parseNum(x.value));if(g.some(v=>!isFinite(v))){alertBox("Enter a number for questions 1 to 4.");return;}pp.ans={g,note:q5.value.trim()};saveP();setView("result");};
+  af.onsubmit=e=>{e.preventDefault();const g=[q1,q2,q3,q4].map(x=>parseNum(x.value));if(g.some(v=>!isFinite(v))){alertBox("Enter a number for questions 1 to 4.");return;}pp.ans={g,note:q5.value.trim()};saveP();{const Y=y1(pp);report("Y1 analysis",{portfolio:portTxt(pp.port),answers:g.join(" | "),correct:Y.ok.map(x=>x?1:0).join(" | "),econ:r1(Y.R.econ),pat:r1(Y.R.pat),oci:r1(Y.R.oci),roe:Math.round(Y.R.roe*10000)/100,de:Y.R.de.toFixed(2),boxesRight:Y.R.correct,boxesWrong:Y.R.wrong,score:Y.score,note:pp.ans.note});}setView("result");};
   function alertBox(t){let el=document.getElementById("aerr");if(!el){el=document.createElement("p");el.id="aerr";el.className="err";af.appendChild(el);}el.textContent=t;}
 }
 function y1(pp){const ev=evVals(pp.ev),R=compute(pp.port,ev);const g=pp.ans.g;const ok=R.an.map((v,i)=>i===3?Math.abs(g[i]-v)<=0.011:Math.abs(g[i]-v)<=Math.max(1,Math.abs(v)*.01));const an=ok.filter(Boolean).length;const score=Math.round(R.econ)+20*R.correct-30*R.wrong+30*an;return {ev,R,ok,an,score};}
@@ -559,10 +570,24 @@ function result(){
   cp.onclick=()=>copyText(tk,cp);goY2.onclick=()=>setView(pp.ans2?"y2result":pp.ev2?"y2analyst":pp.y2locked?"y2wait":"y2plan");
 }
 /* ============ boot ============ */
-document.getElementById("brand").onclick=()=>{if(S.role==="instructor"&&S.session)setView("instr");else if(S.role==="student"&&S.team){const pp=P();setView(pp.ans2?"y2result":pp.ev2?"y2analyst":pp.y2locked?"y2wait":pp.ans?"result":pp.ev?"analyst":pp.locked?"wait":"desk");}else setView("home");};
-function start(data){const sv=(data&&data.view)?data:store.get("dd-state");if(sv&&sv.view)Object.assign(S,sv);
-  if(["y2plan","y2wait","y2analyst","y2result"].includes(S.view)){if(!(S.team&&S.session))S.view="home";else{const pp=P();if(!pp.ans)S.view="desk";else if(S.view==="y2result"&&!pp.ans2)S.view=pp.ev2?"y2analyst":pp.y2locked?"y2wait":"y2plan";else if(S.view==="y2analyst"&&!pp.ev2)S.view=pp.y2locked?"y2wait":"y2plan";}}
-  if(["desk","wait","analyst","result"].includes(S.view)){if(!(S.team&&S.session))S.view="home";else{const pp=P();if(S.view==="result"&&!pp.ans)S.view=pp.ev?"analyst":pp.locked?"wait":"desk";if(S.view==="analyst"&&!pp.ev)S.view=pp.locked?"wait":"desk";if(S.view==="wait"&&!pp.locked)S.view="desk";}}
+document.getElementById("brand").onclick=()=>{if(S.role==="instructor"&&S.session)setView("instr");else if(S.role==="student"&&S.team)setView(studentRoute());else setView("home");};
+function clearTeam(){const t=store.get("dd-team");try{if(t&&t.session&&t.team)localStorage.removeItem("dd:"+t.session+":"+String(t.team).toLowerCase());localStorage.removeItem("dd-team");}catch(e){}S={view:"join"};try{history.replaceState(null,"",location.pathname+location.search);}catch(e){}render();}
+function confirmNew(btn){btn.outerHTML=`<span class="row" id="cfN"><span class="small">This clears your team's answers on this laptop. Your instructor keeps any tokens or sheet rows already sent.</span><button type="button" class="primary" id="cfY">Yes, start a new game</button><button type="button" id="cfX">Cancel</button></span>`;document.getElementById("cfY").onclick=clearTeam;document.getElementById("cfX").onclick=()=>render();}
+function resumeTeam(){const t=store.get("dd-team");if(!(t&&t.team&&t.session)){setView("join");return;}S={view:"desk",role:"student",session:t.session,team:t.team};S._p=null;setView(studentRoute());}
+function resumeHost(){const h=store.get("dd-host");if(!(h&&h.session)){setView("pin");return;}S=Object.assign({},h,{role:"instructor",view:"instr"});setView("instr");}
+function start(data){
+  if(data&&data.view){Object.assign(S,data);}
+  else{
+    const legacy=store.get("dd-state");if(legacy&&legacy.role&&!store.get(roleKey(legacy.role)))store.set(roleKey(legacy.role),legacy);
+    const hash=(location.hash||"").replace("#","");const t=store.get("dd-team"),h=store.get("dd-host");
+    const hasT=!!(t&&t.team&&t.session),hasH=!!(h&&h.session);
+    if(hash==="host"&&hasH){resumeHost();return;}
+    if(hash==="team"&&hasT){resumeTeam();return;}
+    if(hasT&&!hasH){resumeTeam();return;}
+    if(hasH&&!hasT){resumeHost();return;}
+    S={view:"home"};render();return;
+  }
+  if(["desk","wait","analyst","result","y2plan","y2wait","y2analyst","y2result"].includes(S.view)){if(!(S.team&&S.session))S.view="home";else S.view=studentRoute();}
   if(S.view==="instr"&&!S.session)S.view="home";render();}
 window.__dd={compute,encodeEv,decodeEv,evVals,makeToken,readToken,DEALS};
 window.claude?.hot?.snapshot?.(()=>keep());
