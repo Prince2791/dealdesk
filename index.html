@@ -109,6 +109,13 @@ table.lb th{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color
 .score{font-family:var(--display);font-weight:800;font-size:40px;line-height:1;font-variant-numeric:tabular-nums}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
 .kpis div{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.pick select{max-width:100%;box-sizing:border-box}
+.aion{background:#E3F4FF;border-left:5px solid #1B6FA8;border-radius:8px;padding:10px 12px;font-size:14px}
+.aioff{background:#FFF1E0;border-left:5px solid #C46A00;border-radius:8px;padding:10px 12px;font-size:14px}
+.rq{border-top:1px solid var(--line);padding-top:12px}.rq:first-child{border-top:0;padding-top:0}
+.opts label{display:flex;gap:8px;align-items:flex-start;font-weight:400;margin:4px 0;cursor:pointer}.opts input{width:auto;margin-top:3px}
+textarea{width:100%;min-height:96px;font:inherit;padding:10px;border:1px solid var(--line);border-radius:8px;box-sizing:border-box}
+.conf{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}.conf select{width:auto}
 </style>
 
 <header class="top"><div class="bar"><button class="brand" id="brand" type="button"><i aria-hidden="true"></i>Deal Desk</button><div class="chips" id="chips"></div></div><div class="wire" id="wire" hidden><span id="wireText"></span></div></header>
@@ -149,11 +156,75 @@ const EV={
  resin:{label:"Andhra Resins net profit (₹ cr)",vals:[40,80,120],fmt:v=>String(v),def:1}
 };
 const EVK=["rate","bank","volt","port","resin"];
-const PIN="FSA2026", SALT="iimv-fsa-deal-desk", VER="v3 · stages · 25 Oct 2026";
+const PIN="FSA2026", SALT="iimv-fsa-deal-desk", VER="v5.1 · research · 31 Oct 2026";
 function wipeAll(){try{const ks=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&(k.startsWith("dd:")||k.startsWith("dd-")))ks.push(k);}ks.forEach(k=>localStorage.removeItem(k));}catch(e){}}
 /* Google Sheet recording: paste your Apps Script web-app URL (ends in /exec) between the quotes. Leave empty to switch recording off. */
 const SHEET_URL="https://script.google.com/macros/s/AKfycbwExDMq7NSHRdviiXTUZ_PRpFG8tPu_YCU1PkJto8mfqMxQwgMEFCE7qNIVZbFdh6WL/exec";
 function report(stage,data){if(!SHEET_URL)return;try{const body=JSON.stringify(Object.assign({session:S.session,team:S.team,stage,clientTime:new Date().toISOString()},data));fetch(SHEET_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body}).catch(()=>{});}catch(e){}}
+/* ============ research layer ============ */
+const RESEARCH=true;
+const tkey=()=>String(S.session).toUpperCase()+"|"+String(S.team||"").trim().toLowerCase();
+function rid(){return "R"+h53(tkey()+"|rid").toString(36).slice(0,6).toUpperCase();}
+function aiOK(n){const x=(P().stg||{})[n];return !!(x&&x.ai);}
+function rsend(kind,data){const pp=P();if(!RESEARCH||!pp.consent||pp.consent.ok!==true)return;report(kind,Object.assign({sheet:"Research",rid:rid(),roster:(pp.consent.roster||[]).map(m=>m.name+" ("+m.roll+")").join("; "),names:(pp.consent.roster||[]).map(m=>m.name).join("; "),rolls:(pp.consent.roster||[]).map(m=>m.roll).join("; "),members:pp.consent.members,aiFreq:pp.consent.freq,aiTool:pp.consent.tool},data));}
+const CONF=["","1 · Guessing","2 · Unsure","3 · Fairly sure","4 · Sure","5 · Certain"];
+const confSel=(id,v)=>`<select id="${id}" data-conf="${id}"><option value="">How sure are you?</option>${[1,2,3,4,5].map(k=>`<option value="${k}"${+v===k?" selected":""}>${CONF[k]}</option>`).join("")}</select>`;
+const words=t=>(String(t||"").trim().match(/\S+/g)||[]).length;
+const AIU={none:"We did not use AI",check:"We used AI to check our own thinking",ask:"We asked AI for the answer, then discussed it",copy:"We mostly used AI's answer as given"};
+const CHECK=[
+ {q:"A company buys listed shares in another company as a long-term holding. It is not trading them, and it made no election when it bought them. Under Ind AS 109 the shares are measured at:",o:["Amortised cost","FVOCI (old: available for sale)","FVTPL (old: held for trading)","The equity method"],a:2},
+ {q:"An investor owns 18% of a company, appoints 2 of its 8 directors and takes part in its budget and dividend decisions. The investor most likely accounts for the stake:",o:["At FVTPL, because it owns less than 20%","Using the equity method, as an associate","By consolidating it line by line","At amortised cost"],a:1},
+ {q:"Under the equity method, a cash dividend received from an associate:",o:["Is recognised as dividend income in P&L","Is recognised in OCI","Reduces the carrying amount of the investment","Has no accounting effect"],a:2},
+ {q:"Two companies share control of a business set up as a separate company. Each partner has rights only to the net assets of that company. The arrangement is:",o:["A joint operation: each partner shows its share of assets and liabilities","A joint venture: each partner uses the equity method","A subsidiary of both partners","A financial asset at FVTPL"],a:1},
+ {q:"A parent buys 70% of a company for ₹420 cr. The company's net assets at fair value are ₹500 cr, and non-controlling interest is measured at its share of net assets. Goodwill is:",o:["₹70 cr","₹80 cr","₹150 cr","Nil: there is a bargain purchase"],a:0},
+ {q:"A company owns only 5% of a special-purpose vehicle, but it directs the vehicle's key activities and receives almost all of its returns. Under Ind AS 110 the company:",o:["Treats the stake as a 5% financial asset","Uses the equity method","Consolidates the vehicle, because it has control","Discloses the vehicle only in the notes"],a:2}];
+const SURV=[
+ ["s1","When we used AI, it helped us understand WHY a box was right, not just which box."],
+ ["s2","We checked AI's answers against what we knew of Ind AS before using them."],
+ ["s3","We would accept an AI tool's classification of an investment without checking it."],
+ ["s4","Writing the CFO memo made us think harder about our choice."],
+ ["s5","We learned more when we worked without AI."],
+ ["s6","We feel confident explaining these accounting choices to a manager or client."]];
+const LIK=["","1 · Strongly disagree","2 · Disagree","3 · Neutral","4 · Agree","5 · Strongly agree"];
+function consent(){
+  const pp=P();
+  app.innerHTML=`<div class="stack" style="max-width:760px"><div><p class="eyebrow">Before you start</p><h2>This class game is also a research study</h2></div>
+   <div class="panel stack"><p>This activity is part of an approved research study at IIM Visakhapatnam on how students learn accounting judgement and how they use AI tools when they decide and explain.</p>
+    <ul style="margin:0;padding-left:20px" class="stack"><li>If your team agrees, the game records your names and roll numbers with your choices, confidence ratings, CFO memos, the AI prompts you paste, timings and survey answers. Names and roll numbers are used only to match records; they will never appear in any paper or report.</li>
+    <li>Taking part, or not, has <b>no effect on any grade</b>. You play the full game either way.</li>
+    <li>Your instructor will tell you when you may use AI tools.</li>
+    <li>To withdraw later, email Prof. Prince Doliya with your session code and team name, and your data will be deleted.</li></ul></div>
+   <form id="cf" class="panel stack"><div class="opts"><label><input type="radio" name="ok" value="yes"> Every member of our team agrees to take part.</label><label><input type="radio" name="ok" value="no"> At least one of us does not want to take part. We will play without research data being recorded.</label></div>
+    <div class="grid2"><div><label for="cm">How many people are in your team?</label><select id="cm"><option value="">Choose…</option>${[1,2,3,4,5,6].map(k=>`<option>${k}</option>`).join("")}</select></div><div id="ros" class="stack" style="grid-column:1/-1"></div>
+     <div><label for="cq">How often does your team typically use AI tools for coursework?</label><select id="cq"><option value="">Choose…</option>${["Never","Rarely","Weekly","Several times a week","Daily"].map((t,i)=>`<option value="${i+1}">${t}</option>`).join("")}</select></div>
+     <div><label for="ct">Which AI tool do you use most?</label><select id="ct"><option value="">Choose…</option>${["ChatGPT","Gemini","Claude","Copilot","Perplexity","Other","None"].map(t=>`<option>${t}</option>`).join("")}</select></div></div>
+    <p class="err" id="ce" hidden></p><div class="row"><button class="primary" type="submit">Continue</button></div></form></div>`;
+  cm.onchange=()=>{const n=+cm.value||0;const old=[...ros.querySelectorAll("[data-m]")].map(i=>i.value);ros.innerHTML=n?`<p class="small muted" style="margin:0">Name and roll number of every member</p>`+Array.from({length:n},(_,i)=>`<div class="grid2"><div><label for="mn${i}">Member ${i+1} name</label><input id="mn${i}" data-m autocomplete="off"></div><div><label for="mr${i}">Roll number</label><input id="mr${i}" data-m autocomplete="off" style="text-transform:uppercase"></div></div>`).join(""):"";[...ros.querySelectorAll("[data-m]")].forEach((x,i)=>{if(old[i])x.value=old[i];});};
+  cf.onsubmit=e=>{e.preventDefault();const ok=(cf.querySelector('input[name=ok]:checked')||{}).value;if(!ok||!cm.value||!cq.value||!ct.value){ce.hidden=false;ce.textContent="Answer all the questions.";return;}
+    const roster=Array.from({length:+cm.value},(_,i)=>({name:document.getElementById("mn"+i).value.trim(),roll:document.getElementById("mr"+i).value.trim().toUpperCase()}));if(roster.some(m=>!m.name||!m.roll)){ce.hidden=false;ce.textContent="Enter the name and roll number of every member.";return;}
+    pp.consent={ok:ok==="yes",members:+cm.value,roster,freq:+cq.value,tool:ct.value,at:new Date().toISOString()};saveP();
+    rsend("Consent",{note:"consented"});setView("hub");};
+}
+function checkForm(kind){
+  const pp=P();const pre=kind==="pre";
+  app.innerHTML=`<div class="stack" style="max-width:820px"><div><p class="eyebrow">${pre?"Warm-up check · before stage 1":"Final check · after stage 5"}</p><h2>${pre?"Six quick questions. Answer from what you know now.":"The same six questions, plus a short survey"}</h2>
+   <p class="muted" style="margin-top:6px">No AI tools for this check, please. It does not count towards your points${pre?"; the answers come at the end":""}.</p></div>
+   <form id="kf" class="stack"><div class="panel stack">${CHECK.map((c,i)=>`<div class="rq"><p><b>${i+1}.</b> ${esc(c.q)}</p><div class="opts">${c.o.map((o,j)=>`<label><input type="radio" name="k${i}" value="${j}"> ${esc(o)}</label>`).join("")}</div><div class="conf"><span class="small muted">Confidence</span>${confSel("kc"+i)}</div></div>`).join("")}</div>
+   ${pre?"":`<div class="panel stack"><h3>Survey</h3>${SURV.map(([k,t])=>`<div class="rq"><p>${esc(t)}</p><select id="sv-${k}"><option value="">Choose…</option>${[1,2,3,4,5].map(v=>`<option value="${v}">${LIK[v]}</option>`).join("")}</select></div>`).join("")}
+    <div class="rq"><label for="o1">Describe one moment when AI helped your team, or misled it.</label><textarea id="o1"></textarea></div>
+    <div class="rq"><label for="o2">Anything else about learning with or without AI today? (optional)</label><textarea id="o2"></textarea></div></div>`}
+   <p class="err" id="ke" hidden></p><div class="row"><button class="primary" type="submit">Submit</button></div></form></div>`;
+  const t0=Date.now();
+  kf.onsubmit=e=>{e.preventDefault();const a=CHECK.map((c,i)=>{const r=kf.querySelector(`input[name=k${i}]:checked`);return r?+r.value:null;});const cf=CHECK.map((c,i)=>+document.getElementById("kc"+i).value||null);
+    const sv=pre?{}:Object.fromEntries(SURV.map(([k])=>[k,+document.getElementById("sv-"+k).value||null]));
+    if(a.includes(null)||cf.includes(null)||Object.values(sv).includes(null)){ke.hidden=false;ke.textContent="Answer every question and give a confidence rating for each"+(pre?".":", and complete the survey.");return;}
+    const right=a.map((v,i)=>v===CHECK[i].a?1:0),sc=right.reduce((x,y)=>x+y,0);
+    const rec={a,cf,right,score:sc,secs:Math.round((Date.now()-t0)/1000)};if(!pre){rec.sv=sv;rec.o1=o1.value.trim();rec.o2=o2.value.trim();}
+    pp[kind]=rec;saveP();
+    rsend(pre?"Pre-check":"Post-check",Object.assign({answers:a.join(" | "),correct:right.join(" | "),conf:cf.join(" | "),score:sc,secs:rec.secs},pre?{}:Object.assign({},sv,{open1:rec.o1,open2:rec.o2})));
+    setView("hub");};
+}
+const pretest=()=>checkForm("pre"),posttest=()=>checkForm("post");
 const portTxt=port=>Object.entries(port).map(([id,b])=>id+":"+b).join(", ");
 
 /* ============ utils ============ */
@@ -379,8 +450,9 @@ const STG=[
  {n:6,title:"The full desk",std:"All five boxes together",color:"var(--soft)",ink:"var(--ink)",
   intro:"Now put it all together: ₹1,000 cr, nine deals, a market you can't see yet, and a second year.",deals:[],opts:[],ok:{},story:[],qs:[],take:[]}
 ];
-function stageCode(sess,n){return "S"+n+"-"+chk(sess,1000+n);}
-function checkStageCode(sess,n,code){const c=String(code).toUpperCase().replace(/[^A-Z0-9]/g,"");return c==="S"+n+chk(sess,1000+n);}
+function stageCode(sess,n,ai){return "S"+n+"-"+chk(sess,(ai&&n<6?3000:1000)+n);}
+/* returns 0 = wrong code, 1 = opened with AI not allowed, 2 = opened with AI allowed (the AI setting is never shown to students) */
+function checkStageCode(sess,n,code){const c=String(code).toUpperCase().replace(/[^A-Z0-9]/g,"");return c==="S"+n+chk(sess,1000+n)?1:(n<6&&c==="S"+n+chk(sess,3000+n))?2:0;}
 function stageEval(st,port){
   const rows=[];let pl=0,oci=0,hid=0,rev=0,carry=0,gw=0,nci=0,borr=BORR,right=0,wrong=0;
   for(const id of st.deals){const d=DEALS.find(x=>x.id===id),box=port[id],ok=st.ok[id].includes(box),use=ok?box:st.ok[id][0];if(ok)right++;else wrong++;
@@ -409,53 +481,72 @@ function SP(){const pp=P();pp.stg=pp.stg||{};return pp;}
 function stagePoints(pp){return Object.values(pp.stg||{}).reduce((a,x)=>a+(x.done?x.score:0),0);}
 function hub(){
   const pp=SP();
+  if(RESEARCH){if(!pp.consent){consent();return;}if(!pp.pre){pretest();return;}if(pp.stg[5]&&pp.stg[5].done&&!pp.post){posttest();return;}}
   app.innerHTML=`<div class="stack"><div><p class="eyebrow">Team ${esc(S.team)} · Session ${esc(S.session)}</p><h2>Six stages. Learn each box, then run the full desk.</h2>
    <p class="muted" style="max-width:70ch;margin-top:6px">Your instructor opens each stage with a code on the projector. Stages 1–5 teach one Ind AS box at a time; stage 6 puts them all together.</p></div>
    <div class="stack">${STG.map(st=>{const x=pp.stg[st.n]||{};const open=x.open||(st.n===6&&pp.s6);const done=st.n<6?x.done:!!pp.ans;
     return `<div class="panel" style="border-left:6px solid ${st.color}"><div class="row" style="justify-content:space-between"><div style="min-width:0;flex:1 1 260px"><p class="eyebrow" style="color:${st.ink}">Stage ${st.n} · ${esc(st.std)}</p><h3>${esc(st.title)}</h3>${done&&st.n<6?`<p class="small muted">Done · ${x.score} points</p>`:""}</div>
      <div class="row">${open?`<button type="button" class="${done?"":"primary"}" data-go="${st.n}">${done?"Review":"Open"}</button>`:`<input class="code" id="sc${st.n}" placeholder="S${st.n}-__" style="width:120px;text-transform:uppercase" aria-label="Code for stage ${st.n}" autocomplete="off"><button type="button" data-un="${st.n}">Unlock</button>`}</div></div><p class="err small" id="se${st.n}" hidden></p></div>`;}).join("")}</div>
+   ${pp.post?`<div class="panel stack"><p class="eyebrow">Your checks</p><p>Warm-up: <b>${pp.pre.score}/6</b> · Final: <b>${pp.post.score}/6</b></p><details><summary class="small" style="cursor:pointer">See the answers</summary><ol class="small" style="margin:6px 0 0;padding-left:20px">${CHECK.map((c,i)=>`<li>${esc(c.o[c.a])}${pp.post.right[i]?"":" <span class=\"muted\">(you chose: "+esc(c.o[pp.post.a[i]])+")</span>"}</li>`).join("")}</ol></details></div>`:""}
    <div class="panel stack"><p class="eyebrow">Stage points so far</p><div class="score">${stagePoints(pp)}</div>${Object.values(pp.stg).some(x=>x.done)?`<p class="small muted">Stage token (paste it if your instructor asks before stage 6):</p><div class="token">${makeToken({y:0,s:S.session,t:S.team,st:stagePoints(pp),score:stagePoints(pp)})}</div><div class="row"><button type="button" id="cpS">Copy token</button></div>`:""}</div></div>`;
-  app.querySelectorAll("[data-un]").forEach(b=>{const n=+b.dataset.un,inp=document.getElementById("sc"+n);const go=()=>{if(checkStageCode(S.session,n,inp.value)){if(n===6){pp.s6=true;}else{pp.stg[n]=Object.assign(pp.stg[n]||{},{open:true});}saveP();report("Stage "+n+" opened",{});if(n===6)setView(studentRoute());else setView("stage",{stg:n});}else{const e=document.getElementById("se"+n);e.hidden=false;e.textContent="That code doesn't open stage "+n+". Check the projector.";}};b.onclick=go;inp.onkeydown=ev=>{if(ev.key==="Enter")go();};});
+  app.querySelectorAll("[data-un]").forEach(b=>{const n=+b.dataset.un,inp=document.getElementById("sc"+n);const go=()=>{const ck=checkStageCode(S.session,n,inp.value);if(ck){if(n===6){pp.s6=true;}else{pp.stg[n]=Object.assign(pp.stg[n]||{},{open:true,ai:ck===2});}saveP();report("Stage "+n+" opened",{});if(n===6)setView(studentRoute());else setView("stage",{stg:n});}else{const e=document.getElementById("se"+n);e.hidden=false;e.textContent="That code doesn't open stage "+n+". Check the projector.";}};b.onclick=go;inp.onkeydown=ev=>{if(ev.key==="Enter")go();};});
   app.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>{const n=+b.dataset.go;if(n===6)setView(studentRoute6());else setView("stage",{stg:n});});
   const c=document.getElementById("cpS");if(c)c.onclick=()=>copyText(c.closest(".panel").querySelector(".token").textContent,c);
 }
 function stage(){
   const pp=SP(),st=STG[(S.stg||1)-1],x=pp.stg[st.n]=pp.stg[st.n]||{open:true};x.port=x.port||{};
   if(x.locked){stageRes();return;}
+  if(!x.t0){x.t0=Date.now();saveP();}x.conf=x.conf||{};const ai=aiOK(st.n);
   app.innerHTML=`<div class="stack"><div><p class="eyebrow" style="color:${st.ink}">Stage ${st.n} · ${esc(st.std)}</p><h2>${esc(st.title)}</h2><p class="muted" style="max-width:70ch;margin-top:6px">${esc(st.intro)}</p></div>
+
    <div class="deals">${st.deals.map(id=>{const d=DEALS.find(q=>q.id===id);return `<div class="ticket on"><div class="stub"><span class="u">ticket</span><span class="amt">₹${d.t}</span><span class="u">crore</span></div><div class="tbody"><span class="tag ${TAGC[d.tag]}">${esc(d.label)}</span><h3>${esc(d.name)}</h3><ul class="facts">${d.facts.map(f_=>`<li>${esc(f_)}</li>`).join("")}</ul>
-    <div class="pick"><label for="sb-${id}" style="margin:0">Account for it as</label><select id="sb-${id}" data-sb="${id}"><option value="">Choose…</option>${st.opts.map(k=>`<option value="${k}"${x.port[id]===k?" selected":""}>${BOX[k]}</option>`).join("")}</select></div></div></div>`;}).join("")}</div>
+    <div class="pick"><label for="sb-${id}" style="margin:0">Account for it as</label><select id="sb-${id}" data-sb="${id}"><option value="">Choose…</option>${st.opts.map(k=>`<option value="${k}"${x.port[id]===k?" selected":""}>${BOX[k]}</option>`).join("")}</select></div>${RESEARCH?`<div class="conf"><span class="small muted">Confidence</span>${confSel("cf-"+id,x.conf[id])}</div>`:""}</div></div>`;}).join("")}</div>
+   ${RESEARCH?`<div class="panel stack"><h3>Memo to the CFO</h3><label for="smemo" class="small muted" style="font-weight:400">In 40–80 words, tell the CFO how you will account for ${st.deals.length>1?"these deals":"this deal"} and why. Name the standard and the fact that decided it.</label><textarea id="smemo">${esc(x.memo||"")}</textarea><p class="small muted" id="mwc">${words(x.memo)} words</p>
+    <div><p style="margin-bottom:4px"><b>How did your team use AI in this stage?</b></p><div class="opts">${Object.entries(AIU).map(([k,t])=>`<label><input type="radio" name="aiu" value="${k}"${x.aiu===k?" checked":""}> ${t}</label>`).join("")}</div></div>
+    <div><label for="sprm">If you used an AI tool, paste every prompt you typed, exactly as typed (leave blank if none)</label><textarea id="sprm">${esc(x.prompts||"")}</textarea></div></div>`:""}
    <p class="err" id="ste" hidden></p><div class="row"><button type="button" class="primary" id="stl">Lock my choices and see what happens</button><button type="button" id="stb">Back to stages</button></div></div>`;
   app.querySelectorAll("[data-sb]").forEach(sel=>sel.onchange=()=>{x.port[sel.dataset.sb]=sel.value;saveP();});
+  app.querySelectorAll("[data-conf]").forEach(sel=>sel.onchange=()=>{x.conf[sel.id.slice(3)]=+sel.value||null;saveP();});
+  if(RESEARCH){smemo.oninput=()=>{x.memo=smemo.value;mwc.textContent=words(x.memo)+" words";saveP();};sprm.oninput=()=>{x.prompts=sprm.value;saveP();};app.querySelectorAll("input[name=aiu]").forEach(r=>r.onchange=()=>{x.aiu=r.value;saveP();});}
   stb.onclick=()=>setView("hub");
-  stl.onclick=()=>{if(st.deals.some(id=>!x.port[id])){ste.hidden=false;ste.textContent="Choose a box for every deal first.";return;}x.locked=true;saveP();report("Stage "+st.n+" locked",{portfolio:portTxt(x.port)});render();};
+  stl.onclick=()=>{const er=m=>{ste.hidden=false;ste.textContent=m;};if(st.deals.some(id=>!x.port[id]))return er("Choose a box for every deal first.");
+    if(RESEARCH){if(st.deals.some(id=>!x.conf[id]))return er("Give a confidence rating for every deal.");if(words(x.memo)<20)return er("Write the CFO memo first (at least 20 words).");if(!x.aiu)return er("Tell us how your team used AI in this stage.");}
+    x.locked=true;x.t1=Date.now();saveP();report("Stage "+st.n+" locked",{portfolio:portTxt(x.port)});
+    if(RESEARCH){const okb=st.deals.map(id=>st.ok[id].includes(x.port[id])?1:0);const pr=String(x.prompts||"").trim();
+      rsend("Stage "+st.n+" decision",{stageNo:st.n,aiAllowed:ai?1:0,portfolio:portTxt(x.port),boxesCorrect:okb.join(" | "),boxesRight:okb.filter(Boolean).length,boxesWrong:okb.length-okb.filter(Boolean).length,conf:st.deals.map(id=>x.conf[id]).join(" | "),memo:x.memo.trim(),memoWords:words(x.memo),aiUse:x.aiu,prompts:pr,promptChars:pr.length,promptLines:pr?pr.split(/\n\s*\n|\n/).filter(l=>l.trim()).length:0,secs:Math.round((x.t1-x.t0)/1000)});}
+    render();};
 }
 function stageRes(){
   const pp=SP(),st=STG[(S.stg||1)-1],x=pp.stg[st.n],E=stageEval(st,x.port);
   const done=!!x.ans;
   const okv=done?st.qs.map(([l,k],i)=>Math.abs(x.ans[i]-E.v[k])<=(k==="de"?0.011:Math.max(1,Math.abs(E.v[k])*.01))):[];
   app.innerHTML=`<div class="stack"><div><p class="eyebrow" style="color:${st.ink}">Stage ${st.n} · What happened</p><div class="news" style="margin-top:8px">${st.story.map(t=>`<div><b>${esc(t)}</b></div>`).join("")}</div></div>
-   ${E.rows.filter(r=>!r.ok).map(r=>`<div class="flag"><b>Auditor's correction:</b> ${esc(r.d.name)} can't be "${esc(BOX[r.box])}". The numbers below use ${esc(BOX[r.use])}. ${esc(WHY[r.d.id])}</div>`).join("")}
-   <div class="grid2">${E.rows.map(r=>`<div class="panel tw"><h3 style="margin-bottom:4px">${esc(r.d.name)}</h3><p class="small muted" style="margin-bottom:8px">${esc(BOX[r.use])}</p><table class="st">${r.r.lines.map(l=>`<tr><td>${esc(l[0])}</td><td class="n">${f(l[1])}</td></tr>`).join("")}</table></div>`).join("")}</div>
+   ${E.rows.filter(r=>!r.ok).map(r=>`<div class="flag"><b>Auditor's correction:</b> ${esc(r.d.name)} can't be "${esc(BOX[r.box])}". Use ${esc(BOX[r.use])} for your answers. ${esc(WHY[r.d.id])}</div>`).join("")}
+   <div class="grid2">${E.rows.map(r=>`<div class="panel tw"><h3 style="margin-bottom:4px">${esc(r.d.name)}</h3><p class="small muted" style="margin-bottom:8px">${esc(BOX[r.use])}</p>${done?`<table class="st">${r.r.lines.map(l=>`<tr><td>${esc(l[0])}</td><td class="n">${f(l[1])}</td></tr>`).join("")}</table>`:`<ul class="facts small" style="margin:0;padding-left:18px">${r.d.facts.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>`}</div>`).join("")}</div>
+   ${done?"":`<p class="small muted">Work out the numbers yourselves from the facts above and the market news. The full calculation appears after you check your answers.</p>`}
    <form id="sqf" class="panel stack"><h3>Your analysis</h3><div class="grid2">${st.qs.map(([l,k],i)=>`<div><label for="sq${i}">${i+1}. ${esc(l)}</label><input id="sq${i}" inputmode="decimal" autocomplete="off" value="${done?esc(x.ans[i]):""}"${done?" disabled":""}></div>`).join("")}</div>
-    ${done?"":`<div class="row"><button class="primary" type="submit">Check my answers</button></div><p class="err" id="sqe" hidden></p>`}</form>
+    ${done?"":`${RESEARCH?`<div class="conf"><span class="small muted">How sure are you of these answers?</span>${confSel("sqc",x.aconf)}</div>`:""}<div class="row"><button class="primary" type="submit">Check my answers</button></div><p class="err" id="sqe" hidden></p>`}</form>
    ${done?`<div class="panel stack"><h3>Answers</h3>${st.qs.map(([l,k],i)=>`<div class="${okv[i]?"okbox":"nobox"}"><b>${esc(l)}:</b> you said ${k==="de"?Number(x.ans[i]).toFixed(2):f(x.ans[i])}, the answer is <b>${k==="de"?E.v[k].toFixed(2):f(E.v[k])}</b>.</div>`).join("")}</div>
     <div class="panel stack" style="border-left:6px solid ${st.color}"><h3>What to remember</h3><ul style="margin:0;padding-left:20px" class="stack">${st.take.map(t=>`<li>${esc(t)}</li>`).join("")}</ul></div>
     <div class="panel tw"><h3 style="margin-bottom:8px">The same deal under every option</h3><table class="st"><tr><td><b>Deal</b></td>${st.opts.map(k=>`<td><b>${esc(BOX[k])}</b></td>`).join("")}</tr>${st.deals.map(id=>{const d=DEALS.find(q=>q.id===id);return `<tr><td>${esc(d.name)}</td>${st.opts.map(k=>{const okk=st.ok[id].includes(k);const r=stageDeal(st.n,id,k);return `<td class="small">${okk?`P&L ${f(r.pl||0)}${r.oci?` · OCI ${f(r.oci)}`:""}${r.hid?` · hidden ${f(r.hid)}`:""}${r.rev?` · revenue ${f(r.rev)}`:""}${r.addDebt?` · debt +${f(r.addDebt)}`:""}`:`<span class="muted">Not allowed</span>`}</td>`;}).join("")}</tr>`;}).join("")}</table></div>
     <div class="row"><span class="small muted">Stage points: ${x.score} (20 per correct box, 30 per correct answer)</span><button type="button" class="primary" id="sbk">Back to stages</button></div>`:""}
   </div>`;
   if(!done)sqf.onsubmit=e=>{e.preventDefault();const g=st.qs.map((q,i)=>parseNum(document.getElementById("sq"+i).value));if(g.some(v=>!isFinite(v))){sqe.hidden=false;sqe.textContent="Enter a number for every question.";return;}
+    if(RESEARCH){x.aconf=+sqc.value||null;if(!x.aconf){sqe.hidden=false;sqe.textContent="Give a confidence rating for your answers.";return;}}
     x.ans=g;const ok2=st.qs.map(([l,k],i)=>Math.abs(g[i]-E.v[k])<=(k==="de"?0.011:Math.max(1,Math.abs(E.v[k])*.01)));x.score=20*E.right+30*ok2.filter(Boolean).length;x.done=true;saveP();
-    report("Stage "+st.n+" analysis",{portfolio:portTxt(x.port),answers:g.join(" | "),correct:ok2.map(q=>q?1:0).join(" | "),boxesRight:E.right,boxesWrong:E.wrong,score:x.score});render();};
+    report("Stage "+st.n+" analysis",{portfolio:portTxt(x.port),answers:g.join(" | "),correct:ok2.map(q=>q?1:0).join(" | "),boxesRight:E.right,boxesWrong:E.wrong,score:x.score});
+    rsend("Stage "+st.n+" analysis",{stageNo:st.n,aiAllowed:aiOK(st.n)?1:0,answers:g.join(" | "),correct:ok2.map(q=>q?1:0).join(" | "),nCorrect:ok2.filter(Boolean).length,nQuestions:ok2.length,ansConf:x.aconf,score:x.score,secs:Math.round((Date.now()-(x.t1||Date.now()))/1000)});render();};
   else sbk.onclick=()=>setView("hub");
 }
 function studentRoute6(){const pp=P();return pp.ans2?"y2result":pp.ev2?"y2analyst":pp.y2locked?"y2wait":pp.ans?"result":pp.ev?"analyst":pp.locked?"wait":"desk";}
 function iStages(p){
-  S.stShown=S.stShown||{};
+  S.stShown=S.stShown||{};S.stAI=S.stAI||{};
   p.innerHTML=`<div class="stack"><p class="muted" style="max-width:72ch">Open one stage at a time. Each stage takes 8–10 minutes: teams choose, see what happens, answer two to four questions, and read the takeaways. Stage 6 is the full desk; after opening it, use the Run Year 1 and Run Year 2 tabs as before.</p>
    <div class="stack">${STG.map(st=>`<div class="panel" style="border-left:6px solid ${st.color}"><div class="row" style="justify-content:space-between"><div style="flex:1 1 260px;min-width:0"><p class="eyebrow" style="color:${st.ink}">Stage ${st.n} · ${esc(st.std)}</p><h3>${esc(st.title)}</h3></div>
-    <div class="row">${S.stShown[st.n]?`<span class="big" style="font-size:clamp(26px,4vw,44px)">${stageCode(S.session,st.n)}</span><button type="button" data-hide="${st.n}">Hide</button>`:`<button type="button" class="primary" data-show="${st.n}">Show stage ${st.n} code</button>`}</div></div>
+    <div class="row">${RESEARCH&&st.n<6&&!S.stShown[st.n]?`<label class="small" style="display:flex;gap:6px;align-items:center;margin:0;font-weight:400"><input type="checkbox" data-ai="${st.n}" style="width:auto"${S.stAI[st.n]?" checked":""}> AI allowed</label>`:""}${S.stShown[st.n]?`<span class="big" style="font-size:clamp(26px,4vw,44px)">${stageCode(S.session,st.n,S.stAI[st.n])}</span><button type="button" data-hide="${st.n}">Hide</button>`:`<button type="button" class="primary" data-show="${st.n}">Show stage ${st.n} code</button>`}</div></div>
     ${st.n<6?`<details style="margin-top:8px"><summary class="small" style="cursor:pointer">Answer key for stage ${st.n}</summary><ul class="small" style="margin:6px 0 0;padding-left:20px">${st.deals.map(id=>`<li>${esc(DEALS.find(d=>d.id===id).name)}: ${st.ok[id].map(k=>BOX[k]).join(" or ")}</li>`).join("")}${st.take.map(t=>`<li>${esc(t)}</li>`).join("")}</ul></details>`:""}</div>`).join("")}</div></div>`;
+  if(RESEARCH){p.insertAdjacentHTML("afterbegin",`<details class="panel" style="border-left:6px solid #1B6FA8"><summary class="small" style="cursor:pointer"><b>Research mode: how the AI setting works</b></summary><p class="small" style="margin-top:8px">For each stage, tick <b>AI allowed</b> or leave it unticked <i>before</i> you show the code. The code itself tells the game which condition applies; students never see it on their screens, so announce it aloud. Teams that already opened a stage keep the condition of the code they used. Consent, the warm-up check, confidence ratings, CFO memos, AI prompts, timings and the final check go to the <b>Research</b> tab of your Google Sheet with team name, member names and roll numbers (consenting teams only).</p></details>`);}
+  p.querySelectorAll("[data-ai]").forEach(c=>c.onchange=()=>{S.stAI[c.dataset.ai]=c.checked;save();});
   p.querySelectorAll("[data-show]").forEach(b=>b.onclick=()=>{S.stShown[b.dataset.show]=true;render();});
   p.querySelectorAll("[data-hide]").forEach(b=>b.onclick=()=>{S.stShown[b.dataset.hide]=false;render();});
 }
@@ -463,7 +554,7 @@ function iStages(p){
 /* ============ state ============ */
 let S={view:"home"};let tick=null;
 const app=document.getElementById("app"),chips=document.getElementById("chips");
-const keep=()=>({stg:S.stg,view:S.view,role:S.role,session:S.session,team:S.team,itab:S.itab,evIdx:S.evIdx,ev2Idx:S.ev2Idx,lbText:S.lbText});
+const keep=()=>({stg:S.stg,view:S.view,role:S.role,session:S.session,team:S.team,itab:S.itab,evIdx:S.evIdx,ev2Idx:S.ev2Idx,lbText:S.lbText,stAI:S.stAI});
 function roleKey(r){return r==="instructor"?"dd-host":r==="student"?"dd-team":null;}
 function save(){const k=roleKey(S.role);if(k)store.set(k,keep());const h=S.role==="instructor"?"#host":S.role==="student"?"#team":"";try{if(location.hash!==h)history.replaceState(null,"",location.pathname+location.search+h);}catch(e){}}
 function studentRoute(){const pp=P();if(!pp.s6&&!pp.locked)return "hub";return pp.ans2?"y2result":pp.ev2?"y2analyst":pp.y2locked?"y2wait":pp.ans?"result":pp.ev?"analyst":pp.locked?"wait":"desk";}
@@ -490,7 +581,7 @@ function render(){
   if(S.role&&S.view!=="home"){chips.innerHTML+=`<button type="button" class="chip" id="swr" style="cursor:pointer;border:1px solid var(--line)">Home</button>`;}
   const p=S.role==="student"&&S.team&&S.session?P():null;
   setWire(p&&p.ev2&&S.view.startsWith("y2")?null:p&&p.ev?evVals(p.ev):(S.view==="instr"&&S.evIdx&&S.evShown?evVals(S.evIdx):null));
-  ({home,pin,instr,join,desk,wait,analyst,result,y2plan,y2wait,y2analyst,y2result,hub,stage}[S.view]||home)();
+  ({home,pin,instr,join,desk,wait,analyst,result,y2plan,y2wait,y2analyst,y2result,hub,stage,consent,pretest,posttest}[S.view]||home)();
   {const sw=document.getElementById("swr");if(sw)sw.onclick=()=>setView("home");}
   window.scrollTo(0,0);
 }
@@ -703,7 +794,7 @@ function start(data){
   if(hash==="team"&&t&&t.team&&t.session){resumeTeam();return;}
   S={view:"home"};render();
 }
-window.__dd={compute,encodeEv,decodeEv,evVals,makeToken,readToken,DEALS};
+window.__dd={compute,encodeEv,decodeEv,evVals,makeToken,readToken,DEALS,stageCode};
 window.claude?.hot?.snapshot?.(()=>keep());
 window.claude?.hot?.ready?window.claude.hot.ready(start):start(window.claude?.hot?.data??{});
 })();
